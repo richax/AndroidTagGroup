@@ -5,4 +5,9 @@
         <!-- Customize your theme here. -->
     </style>
 
+    <style name="TagGroup.DateRangePicker">
+        <item name="atg_isMultipleChoice">false</item>
+        <item name="atg_backgroundColor">#F3F3F3</item>
+    </style>
+
 </resources>

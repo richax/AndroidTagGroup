@@ -34,6 +34,7 @@
     </style>
 
     <style name="TagGroup.Large" parent="TagGroup">
+        <item name="atg_isMultipleChoice">true</item>
         <item name="atg_borderStrokeWidth">0.7dp</item>
         <item name="atg_textSize">15sp</item>
         <item name="atg_horizontalSpacing">9dp</item>

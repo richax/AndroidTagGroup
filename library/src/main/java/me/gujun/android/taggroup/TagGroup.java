@@ -70,6 +70,7 @@ public class TagGroup extends ViewGroup {
 
     /** Indicates whether this TagGroup is set up to APPEND mode or DISPLAY mode. Default is false. */
     private boolean isAppendMode;
+    private boolean isMultipleChoice;
 
     /** The text to be displayed when the text of the INPUT tag is empty. */
     private CharSequence inputHint;
@@ -155,6 +156,7 @@ public class TagGroup extends ViewGroup {
         final TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.TagGroup, defStyleAttr, R.style.TagGroup);
         try {
             isAppendMode = a.getBoolean(R.styleable.TagGroup_atg_isAppendMode, false);
+            isMultipleChoice = a.getBoolean(R.styleable.TagGroup_atg_isMultipleChoice, false);
             inputHint = a.getText(R.styleable.TagGroup_atg_inputHint);
             borderColor = a.getColor(R.styleable.TagGroup_atg_borderColor, default_border_color);
             textColor = a.getColor(R.styleable.TagGroup_atg_textColor, default_text_color);
@@ -297,7 +299,13 @@ public class TagGroup extends ViewGroup {
         Parcelable superState = super.onSaveInstanceState();
         SavedState ss = new SavedState(superState);
         ss.tags = getTags();
-        ss.checkedPosition = getCheckedTagIndex();
+
+        List<Integer> checkedTagIndexes = getCheckedTagIndexes();
+        ss.checkedPositions = new int[checkedTagIndexes.size()];
+        for (int i = 0, length = checkedTagIndexes.size(); i < length; i++) {
+            ss.checkedPositions[i] = checkedTagIndexes.get(i);
+        }
+
         if (getInputTag() != null) {
             ss.input = getInputTag().getText().toString();
         }
@@ -315,10 +323,13 @@ public class TagGroup extends ViewGroup {
         super.onRestoreInstanceState(ss.getSuperState());
 
         setTags(ss.tags);
-        TagView checkedTagView = getTagAt(ss.checkedPosition);
-        if (checkedTagView != null) {
-            checkedTagView.setChecked(true);
+        for (int position : ss.checkedPositions) {
+            TagView checkedTagView = getTagAt(position);
+            if (checkedTagView != null) {
+                checkedTagView.setChecked(true);
+            }
         }
+
         if (getInputTag() != null) {
             getInputTag().setText(ss.input);
         }
@@ -420,32 +431,43 @@ public class TagGroup extends ViewGroup {
     }
 
     /**
-     * Returns the checked tag view in the group.
-     *
-     * @return the checked tag view or null if not exists.
+     * Unchecked all the checked TagView.
      */
-    protected TagView getCheckedTag() {
-        final int checkedTagIndex = getCheckedTagIndex();
-        if (checkedTagIndex != -1) {
-            return getTagAt(checkedTagIndex);
+    private void clearCheckedTag() {
+        List<TagView> checkedTagViews = getCheckedTags();
+        for (TagView tagView : checkedTagViews) {
+            tagView.setChecked(false);
         }
-        return null;
     }
 
     /**
-     * Return the checked tag index.
+     * Returns all the checked tag view in the group.
      *
-     * @return the checked tag index, or -1 if not exists.
+     * @return all the checked tag view.
      */
-    protected int getCheckedTagIndex() {
-        final int count = getChildCount();
-        for (int i = 0; i < count; i++) {
+    protected List<TagView> getCheckedTags() {
+        ArrayList<TagView> checkedTagViews = new ArrayList<>();
+        List<Integer> checkedTagIndexes = getCheckedTagIndexes();
+        for (Integer index : checkedTagIndexes) {
+            checkedTagViews.add(getTagAt(index));
+        }
+        return checkedTagViews;
+    }
+
+    /**
+     * Return all the checked tag index.
+     *
+     * @return all the checked tag index.
+     */
+    protected List<Integer> getCheckedTagIndexes() {
+        ArrayList<Integer> checkedIndexes = new ArrayList<>();
+        for (int i = 0, count = getChildCount(); i < count; i++) {
             final TagView tag = getTagAt(i);
             if (tag.isChecked) {
-                return i;
+                checkedIndexes.add(i);
             }
         }
-        return -1;
+        return checkedIndexes;
     }
 
     /**
@@ -582,7 +604,8 @@ public class TagGroup extends ViewGroup {
                 };
         int tagCount;
         String[] tags;
-        int checkedPosition;
+        int checkedTagCount;
+        int[] checkedPositions;
         String input;
 
         public SavedState(Parcel source) {
@@ -590,7 +613,9 @@ public class TagGroup extends ViewGroup {
             tagCount = source.readInt();
             tags = new String[tagCount];
             source.readStringArray(tags);
-            checkedPosition = source.readInt();
+            checkedTagCount = source.readInt();
+            checkedPositions = new int[checkedTagCount];
+            source.readIntArray(checkedPositions);
             input = source.readString();
         }
 
@@ -604,7 +629,9 @@ public class TagGroup extends ViewGroup {
             tagCount = tags.length;
             dest.writeInt(tagCount);
             dest.writeStringArray(tags);
-            dest.writeInt(checkedPosition);
+            checkedTagCount = checkedPositions.length;
+            dest.writeInt(checkedTagCount);
+            dest.writeIntArray(checkedPositions);
             dest.writeString(input);
         }
     }
@@ -619,10 +646,7 @@ public class TagGroup extends ViewGroup {
             if (isAppendMode) {
                 if (tag.mState == TagView.STATE_INPUT) {
                     // If the clicked tag is in INPUT state, uncheck the previous checked tag if exists.
-                    final TagView checkedTag = getCheckedTag();
-                    if (checkedTag != null) {
-                        checkedTag.setChecked(false);
-                    }
+                    clearCheckedTag();
                 } else {
                     // If the clicked tag is currently checked, delete the tag.
                     if (tag.isChecked) {
@@ -630,14 +654,16 @@ public class TagGroup extends ViewGroup {
                     } else {
                         // If the clicked tag is unchecked, uncheck the previous checked tag if exists,
                         // then check the clicked tag.
-                        final TagView checkedTag = getCheckedTag();
-                        if (checkedTag != null) {
-                            checkedTag.setChecked(false);
-                        }
+                        clearCheckedTag();
                         tag.setChecked(true);
                     }
                 }
             } else {
+                if (!isMultipleChoice && !tag.isChecked) {
+                    clearCheckedTag();
+                }
+                tag.setChecked(!tag.isChecked);
+
                 if (mOnTagClickListener != null) {
                     mOnTagClickListener.onTagClick(tag.getText().toString());
                 }
@@ -774,10 +800,7 @@ public class TagGroup extends ViewGroup {
                                             mOnTagChangeListener.onDelete(TagGroup.this, lastNormalTagView.getText().toString());
                                         }
                                     } else {
-                                        final TagView checkedTagView = getCheckedTag();
-                                        if (checkedTagView != null) {
-                                            checkedTagView.setChecked(false);
-                                        }
+                                        clearCheckedTag();
                                         lastNormalTagView.setChecked(true);
                                     }
                                     return true;
@@ -793,10 +816,7 @@ public class TagGroup extends ViewGroup {
                     @Override
                     public void beforeTextChanged(CharSequence s, int start, int count, int after) {
                         // When the INPUT state tag changed, uncheck the checked tag if exists.
-                        final TagView checkedTagView = getCheckedTag();
-                        if (checkedTagView != null) {
-                            checkedTagView.setChecked(false);
-                        }
+                        clearCheckedTag();
                     }
 
                     @Override
@@ -819,12 +839,14 @@ public class TagGroup extends ViewGroup {
          */
         public void setChecked(boolean checked) {
             isChecked = checked;
-            // Make the checked mark drawing region.
-            setPadding(horizontalPadding,
-                    verticalPadding,
-                    isChecked ? (int) (horizontalPadding + getHeight() / 2.5f + CHECKED_MARKER_OFFSET)
-                            : horizontalPadding,
-                    verticalPadding);
+            if (isAppendMode) {
+                // Make the checked mark drawing region.
+                setPadding(horizontalPadding,
+                        verticalPadding,
+                        isChecked ? (int) (horizontalPadding + getHeight() / 2.5f + CHECKED_MARKER_OFFSET)
+                                : horizontalPadding,
+                        verticalPadding);
+            }
             invalidatePaint();
         }
 
@@ -880,9 +902,16 @@ public class TagGroup extends ViewGroup {
                     }
                 }
             } else {
-                mBorderPaint.setColor(borderColor);
-                mBackgroundPaint.setColor(backgroundColor);
-                setTextColor(textColor);
+                mBorderPaint.setPathEffect(null);
+                if (isChecked) {
+                    mBorderPaint.setColor(checkedBorderColor);
+                    mBackgroundPaint.setColor(checkedBackgroundColor);
+                    setTextColor(checkedTextColor);
+                } else {
+                    mBorderPaint.setColor(borderColor);
+                    mBackgroundPaint.setColor(backgroundColor);
+                    setTextColor(textColor);
+                }
             }
 
             if (isPressed) {
@@ -899,7 +928,8 @@ public class TagGroup extends ViewGroup {
             canvas.drawRect(mHorizontalBlankFillRectF, mBackgroundPaint);
             canvas.drawRect(mVerticalBlankFillRectF, mBackgroundPaint);
 
-            if (isChecked) {
+            // draw X on right side when the TagGroup is in AppendMode and the TagView is checked.
+            if (isChecked && isAppendMode) {
                 canvas.save();
                 canvas.rotate(45, mCheckedMarkerBound.centerX(), mCheckedMarkerBound.centerY());
                 canvas.drawLine(mCheckedMarkerBound.left, mCheckedMarkerBound.centerY(),

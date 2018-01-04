@@ -2,6 +2,8 @@
     <declare-styleable name="TagGroup">
         <!-- Whether the tag group is in append mode. -->
         <attr name="atg_isAppendMode" format="boolean" />
+        <!-- Whether the tag group allows multiple-choice when it is in normal mode -->
+        <attr name="atg_isMultipleChoice" format="boolean" />
         <!-- If the tag group is in append mode, what the hint of input tag. -->
         <attr name="atg_inputHint" format="string" />
 
